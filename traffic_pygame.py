@@ -9,6 +9,7 @@ Controles:
 """
 
 import sys
+import os
 import pygame
 import numpy as np
 
@@ -55,6 +56,34 @@ LIGHT_CLR = {
 }
 
 PHASE_NAMES = ["Norte↓", "Oeste→", "Este↑", "Sur←"]
+
+# ── Imágenes de semáforos (cargadas una vez) ──────────────────────────────────
+_SIGNAL_IMGS: dict = {}
+
+def _scale_proportional(img, target_h):
+    """Escala manteniendo la proporción original dado un alto objetivo."""
+    ow, oh = img.get_size()
+    w = max(1, round(ow * target_h / oh))
+    return pygame.transform.smoothscale(img, (w, target_h))
+
+
+def _load_signals():
+    """Carga las imágenes de semáforos desde images/signals/."""
+    if _SIGNAL_IMGS:
+        return
+    base = os.path.join(os.path.dirname(__file__), "images", "signals")
+    raw = {}
+    for name, state in [("green", "G"), ("yellow", "Y"), ("red", "R")]:
+        raw[state] = pygame.image.load(os.path.join(base, f"{name}.png")).convert_alpha()
+        _SIGNAL_IMGS[f"{state}_small"] = _scale_proportional(raw[state], 36)
+        _SIGNAL_IMGS[f"{state}_large"] = _scale_proportional(raw[state], 56)
+    # AR (transición) — versión oscurecida del rojo
+    for suffix in ("small", "large"):
+        base_img = _SIGNAL_IMGS[f"R_{suffix}"].copy()
+        dark = pygame.Surface(base_img.get_size(), pygame.SRCALPHA)
+        dark.fill((0, 0, 0, 160))
+        base_img.blit(dark, (0, 0))
+        _SIGNAL_IMGS[f"AR_{suffix}"] = base_img
 
 # ── Conversión de coordenadas ─────────────────────────────────────────────────
 def w2s(x, y):
@@ -165,12 +194,13 @@ def draw_world(surf, model):
         pygame.draw.rect(surf, C["road"], w2s_rect(wx, wy, ww, wh))
 
     # Semáforos
+    _load_signals()
     lights = model.ctrl.lights()
     for d, (wx, wy) in LIGHT_LOCS.items():
         sx, sy = w2s(wx, wy)
-        clr = LIGHT_CLR.get(lights.get(d, 'R'), C["red_l"])
-        pygame.draw.circle(surf, (15, 15, 15), (sx, sy), 9)
-        pygame.draw.circle(surf, clr,          (sx, sy), 6)
+        state = lights.get(d, 'R')
+        img = _SIGNAL_IMGS.get(f"{state}_small", _SIGNAL_IMGS["R_small"])
+        surf.blit(img, (sx - img.get_width() // 2, sy - img.get_height() // 2))
 
     # Coches
     for car in model.cars:
@@ -198,9 +228,9 @@ def draw_panel(surf, model, ui, paused, font_title, font_lbl, font_val):
     # Indicador de fase del semáforo
     phase_name = PHASE_NAMES[model.ctrl.phase]
     sub        = model.ctrl.sub
-    clr        = LIGHT_CLR.get(sub, C["red_l"])
-    pygame.draw.circle(surf, (30, 30, 30), (CX, 52), 14)
-    pygame.draw.circle(surf, clr,          (CX, 52), 10)
+    _load_signals()
+    img = _SIGNAL_IMGS.get(f"{sub}_large", _SIGNAL_IMGS["R_large"])
+    surf.blit(img, (CX - img.get_width() // 2, 52 - img.get_height() // 2))
     pt = font_lbl.render(f"Fase: {phase_name} ({sub})", True, C["gray"])
     surf.blit(pt, pt.get_rect(centerx=CX, y=70))
 
