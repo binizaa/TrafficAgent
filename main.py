@@ -1,118 +1,86 @@
-import mesa
-from mesa import DataCollector
-from mesa.space import SingleGrid
-from mesa.visualization import SolaraViz, make_space_component, make_plot_component
+"""
+Punto de entrada — Simulación de tráfico en intersección compleja.
 
+Uso:
+    python main.py
 
-# ---------- Agents ----------
+Controles:
+    SPACE          Pausar / Continuar
+    R              Reiniciar
+    Q / ESC        Salir
+    Botones panel  Ajustar parámetros
+"""
 
-class Tree(mesa.Agent):
-    """Un árbol que puede estar vivo, ardiendo o muerto."""
+import sys
+import pygame
 
-    ALIVE = "alive"
-    BURNING = "burning"
-    DEAD = "dead"
-
-    def __init__(self, model):
-        super().__init__(model)
-        self.state = self.ALIVE
-
-    def step(self):
-        if self.state == self.BURNING:
-            # Propagar fuego a vecinos vivos
-            neighbors = self.model.grid.get_neighbors(self.pos, moore=False, include_center=False)
-            for neighbor in neighbors:
-                if isinstance(neighbor, Tree) and neighbor.state == self.ALIVE:
-                    neighbor.state = self.BURNING
-            # El árbol en llamas muere
-            self.state = self.DEAD
-
-
-# ---------- Model ----------
-
-class ForestModel(mesa.Model):
-    """Modelo de incendio forestal."""
-
-    def __init__(self, width=20, height=20, density=0.65, seed=None):
-        super().__init__(seed=seed)
-        self.width = width
-        self.height = height
-        self.density = density
-        self.grid = SingleGrid(width, height, torus=False)
-
-        self.datacollector = DataCollector(
-            model_reporters={
-                "Alive":   lambda m: sum(1 for a in m.agents if isinstance(a, Tree) and a.state == Tree.ALIVE),
-                "Burning": lambda m: sum(1 for a in m.agents if isinstance(a, Tree) and a.state == Tree.BURNING),
-                "Dead":    lambda m: sum(1 for a in m.agents if isinstance(a, Tree) and a.state == Tree.DEAD),
-            }
-        )
-
-        # Poblar la grilla
-        for contents, (x, y) in self.grid.coord_iter():
-            if self.random.random() < self.density:
-                tree = Tree(self)
-                self.grid.place_agent(tree, (x, y))
-                # Columna izquierda comienza ardiendo
-                if x == 0:
-                    tree.state = Tree.BURNING
-
-        self.datacollector.collect(self)
-        self.running = True
-
-    def step(self):
-        self.agents.shuffle_do("step")
-        self.datacollector.collect(self)
-        # Parar si no hay árboles ardiendo
-        if not any(a.state == Tree.BURNING for a in self.agents if isinstance(a, Tree)):
-            self.running = False
-
-
-# ---------- Visualization ----------
-
-COLORS = {
-    Tree.ALIVE:   "#228B22",   # verde
-    Tree.BURNING: "#FF4500",   # rojo-naranja
-    Tree.DEAD:    "#4A3728",   # marrón oscuro
-}
-
-
-def agent_portrayal(agent):
-    if isinstance(agent, Tree):
-        return {"color": COLORS[agent.state], "size": 25}
-    return {}
-
-
-model_params = {
-    "width":   {"type": "SliderInt", "value": 20, "min": 5, "max": 50, "step": 5, "label": "Ancho"},
-    "height":  {"type": "SliderInt", "value": 20, "min": 5, "max": 50, "step": 5, "label": "Alto"},
-    "density": {"type": "SliderFloat", "value": 0.65, "min": 0.1, "max": 1.0, "step": 0.05, "label": "Densidad"},
-}
-
-SpaceView = make_space_component(agent_portrayal)
-ChartView = make_plot_component(["Alive", "Burning", "Dead"])
-
-model_instance = ForestModel()
-
-page = SolaraViz(
-    model_instance,
-    components=[SpaceView, ChartView],
-    model_params=model_params,
-    name="Forest Fire Model",
+from traffic_pygame import (
+    draw_world, draw_panel, build_ui, make_model,
+    WIN_W, WIN_H,
 )
-page  # noqa: B018 – requerido por SolaraViz
+
+
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((WIN_W, WIN_H))
+    pygame.display.set_caption("Tráfico — Intersección Compleja")
+
+    font_title = pygame.font.SysFont("Arial", 13, bold=True)
+    font_lbl   = pygame.font.SysFont("Arial", 12)
+    font_val   = pygame.font.SysFont("Arial", 13, bold=True)
+
+    ui     = build_ui()
+    model  = make_model(ui)
+    paused = False
+    clock  = pygame.time.Clock()
+
+    btn_pause   = ui["buttons"][0]
+    btn_restart = ui["buttons"][1]
+    stp_fps     = ui["steppers"][3]
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_q, pygame.K_ESCAPE):
+                    running = False
+                elif event.key == pygame.K_SPACE:
+                    paused = not paused
+                    btn_pause.active = paused
+                elif event.key == pygame.K_r:
+                    model  = make_model(ui)
+                    paused = False
+                    btn_pause.active = False
+
+            for stp in ui["steppers"]:
+                stp.handle_event(event)
+
+            if btn_pause.handle_event(event):
+                paused = btn_pause.active
+
+            if btn_restart.handle_event(event):
+                model  = make_model(ui)
+                paused = False
+                btn_pause.active = False
+
+        ui["fps"] = int(stp_fps.value)
+
+        if not paused:
+            model.t += 1
+            model.step()
+
+        draw_world(screen, model)
+        draw_panel(screen, model, ui, paused, font_title, font_lbl, font_val)
+
+        pygame.display.flip()
+        clock.tick(ui["fps"])
+
+    pygame.quit()
+    sys.exit()
 
 
 if __name__ == "__main__":
-    # Ejecución en consola (sin UI)
-    model = ForestModel(width=20, height=20, density=0.65)
-    for _ in range(30):
-        if not model.running:
-            break
-        model.step()
-
-    data = model.datacollector.get_model_vars_dataframe()
-    print(data.tail(10))
-    print(f"\nEstado final — Vivos: {data['Alive'].iloc[-1]}, "
-          f"Ardiendo: {data['Burning'].iloc[-1]}, "
-          f"Muertos: {data['Dead'].iloc[-1]}")
+    main()
