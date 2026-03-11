@@ -3,10 +3,25 @@ import numpy as np
 import pygame
 from itertools import cycle
 
-from config import ANCHO_MAXIMO_VENTANA, FPS, DISTANCIA_MINIMA, CSV_FILE, FONDO_PATH
+from config import ANCHO_MAXIMO_VENTANA, FPS, DISTANCIA_MINIMA, CSV_FILE, FONDO_PATH, SEMAFOROS
 from model.car_agent import CarAgent
+from model.traffic_light import TrafficLight
+from engine.traffic_manager import TrafficManager
 from view.renderer import draw_frame
 from engine.loader import load_and_scale_paths
+
+
+def _build_traffic_lights(semaforos_cfg, scale):
+    lights = []
+    for cfg in semaforos_cfg:
+        x, y = cfg["pos"]
+        light = TrafficLight(
+            pos=(x * scale, y * scale),
+            direccion=cfg["direccion"],
+            grupo=cfg["grupo"],
+        )
+        lights.append(light)
+    return lights
 
 
 def run():
@@ -28,16 +43,19 @@ def run():
         pygame.quit()
         return
 
-    cycler = cycle(paths)
-    agents = []
-    reloj = pygame.time.Clock()
+    traffic_lights  = _build_traffic_lights(SEMAFOROS, scale)
+    traffic_manager = TrafficManager(traffic_lights)
+
+    cycler     = cycle(paths)
+    agents     = []
+    reloj      = pygame.time.Clock()
     last_spawn = pygame.time.get_ticks()
     spawn_delay = 700
 
-    paused = False
+    paused  = False
     running = True
     while running:
-        fps_real = reloj.tick(FPS)
+        dt = reloj.tick(FPS)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -46,6 +64,8 @@ def run():
                 paused = not paused
 
         if not paused:
+            traffic_manager.update(dt)
+
             if pygame.time.get_ticks() - last_spawn > spawn_delay:
                 color = (random.randint(100, 255), random.randint(100, 255), 60)
                 nuevo_camino = next(cycler)
@@ -62,10 +82,10 @@ def run():
                     last_spawn = pygame.time.get_ticks()
 
             for a in agents:
-                a.update(agents)
+                a.update(agents, traffic_lights, dt)
 
             agents = [a for a in agents if a.active]
 
-        draw_frame(pantalla, fondo_scaled, agents, reloj.get_fps(), paused)
+        draw_frame(pantalla, fondo_scaled, agents, traffic_lights, reloj.get_fps(), paused)
 
     pygame.quit()
