@@ -114,6 +114,26 @@ ROAD_RECTS = [
     ( w*12,      -L,      2*w,       2*L),   # vertical largo 4
 ]
 
+# Puntos donde el pasto "muerde" la esquina de una junta‑T para crear curva cóncava.
+# Cada tupla es la posición mundo (wx, wy) del vértice interior de la T.
+_GRASS_CORNERS = [
+    # Vertical corto izquierdo (x: -w*16 a -w*14) sale por la parte inferior
+    # de la banda horizontal principal (borde inferior en y = -w*5)
+    (-w*16, -w*5), (-w*14, -w*5),
+    # Vertical corto derecho (x: w*16 a w*18)
+    ( w*16, -w*5), ( w*18, -w*5),
+
+    # Horizontal parcial superior (y: w*14 a w*16) cruza el borde derecho
+    # del vertical largo izquierdo (borde derecho en x = -w*8)
+    (-w*8,  w*16), (-w*8,  w*14),
+    # … y el borde izquierdo del vertical largo derecho (x = w*10)
+    ( w*10, w*16), ( w*10, w*14),
+
+    # Horizontal parcial inferior (y: -w*14 a -w*12)
+    (-w*8, -w*12), (-w*8, -w*14),
+    ( w*10, -w*12), ( w*10, -w*14),
+]
+
 # Posiciones de los 4 semáforos representativos (mundo)
 LIGHT_LOCS = {
     'O680': ( 0,     w*7),
@@ -230,10 +250,17 @@ def draw_world(surf, model):
     # Fondo verde (pasto)
     surf.fill(C["grass"], pygame.Rect(0, 0, WIN_SIZE, WIN_H))
 
-    # Carriles con esquinas redondeadas
+    # Carriles con extremos redondeados
     for seg in ROAD_RECTS:
         _draw_road_segment(surf, *seg)
-    # Marcas de carril (línea punteada central)
+
+    # Curvas cóncavas en las juntas‑T (círculo de pasto que "come" la esquina)
+    r_corner = max(6, int(w * SCALE))
+    for wx, wy in _GRASS_CORNERS:
+        sx, sy = w2s(wx, wy)
+        pygame.draw.circle(surf, C["grass"], (sx, sy), r_corner)
+
+    # Marcas de carril (línea punteada central de cada segmento)
     for seg in ROAD_RECTS:
         _draw_lane_mark(surf, *seg)
 
