@@ -34,34 +34,38 @@ def run():
     last_spawn = pygame.time.get_ticks()
     spawn_delay = 700
 
+    paused = False
     running = True
     while running:
-        reloj.tick(FPS)
+        fps_real = reloj.tick(FPS)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                paused = not paused
 
-        if pygame.time.get_ticks() - last_spawn > spawn_delay:
-            color = (random.randint(100, 255), random.randint(100, 255), 60)
-            nuevo_camino = next(cycler)
+        if not paused:
+            if pygame.time.get_ticks() - last_spawn > spawn_delay:
+                color = (random.randint(100, 255), random.randint(100, 255), 60)
+                nuevo_camino = next(cycler)
 
-            puede_aparecer = True
-            inicio = np.array(nuevo_camino[0])
+                puede_aparecer = True
+                inicio = np.array(nuevo_camino[0])
+                for a in agents:
+                    if np.linalg.norm(a.pos - inicio) < DISTANCIA_MINIMA * 1.5:
+                        puede_aparecer = False
+                        break
+
+                if puede_aparecer:
+                    agents.append(CarAgent(nuevo_camino, color, random.uniform(2.0, 3.5)))
+                    last_spawn = pygame.time.get_ticks()
+
             for a in agents:
-                if np.linalg.norm(a.pos - inicio) < DISTANCIA_MINIMA * 1.5:
-                    puede_aparecer = False
-                    break
+                a.update(agents)
 
-            if puede_aparecer:
-                agents.append(CarAgent(nuevo_camino, color, random.uniform(2.0, 3.5)))
-                last_spawn = pygame.time.get_ticks()
+            agents = [a for a in agents if a.active]
 
-        for a in agents:
-            a.update(agents)
-
-        agents = [a for a in agents if a.active]
-
-        draw_frame(pantalla, fondo_scaled, agents)
+        draw_frame(pantalla, fondo_scaled, agents, reloj.get_fps(), paused)
 
     pygame.quit()
