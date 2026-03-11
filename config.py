@@ -1,0 +1,6 @@
+CSV_FILE = 'rutas_cache.csv'
+FONDO_PATH = 'images/fondo.png'
+ANCHO_MAXIMO_VENTANA = 1000
+FPS = 60
+RADIO_COCHE = 8
+DISTANCIA_MINIMA = 24
