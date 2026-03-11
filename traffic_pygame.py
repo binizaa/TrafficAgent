@@ -185,13 +185,57 @@ class Stepper:
 
 
 # ── Dibujo ────────────────────────────────────────────────────────────────────
+def _draw_road_segment(surf, wx, wy, ww, wh):
+    """Road rect with rounded caps so junctions look curved."""
+    rect = w2s_rect(wx, wy, ww, wh)
+    pygame.draw.rect(surf, C["road"], rect)
+    r = max(2, min(rect.width, rect.height) // 2)
+    if ww >= wh:                              # horizontal → round left/right
+        cy = rect.top + rect.height // 2
+        pygame.draw.circle(surf, C["road"], (rect.left,  cy), r)
+        pygame.draw.circle(surf, C["road"], (rect.right, cy), r)
+    else:                                     # vertical → round top/bottom
+        cx = rect.left + rect.width // 2
+        pygame.draw.circle(surf, C["road"], (cx, rect.top),    r)
+        pygame.draw.circle(surf, C["road"], (cx, rect.bottom), r)
+
+
+def _draw_lane_mark(surf, wx, wy, ww, wh):
+    """Dashed white centre-line along a road segment (lane divider)."""
+    CLR = (100, 100, 100)
+    dash, gap = 7, 5
+    if ww >= wh:                              # horizontal
+        py       = w2s(wx, wy + wh / 2)[1]
+        sx0      = w2s(wx,       0)[0]
+        sx1      = w2s(wx + ww,  0)[0]
+        x, on = sx0, True
+        while x < sx1:
+            nx = min(x + (dash if on else gap), sx1)
+            if on:
+                pygame.draw.line(surf, CLR, (x, py), (nx, py), 1)
+            x, on = nx, not on
+    else:                                     # vertical
+        px       = w2s(wx + ww / 2, wy)[0]
+        sy0      = w2s(0, wy + wh)[1]
+        sy1      = w2s(0, wy      )[1]
+        y, on = sy0, True
+        while y < sy1:
+            ny = min(y + (dash if on else gap), sy1)
+            if on:
+                pygame.draw.line(surf, CLR, (px, y), (px, ny), 1)
+            y, on = ny, not on
+
+
 def draw_world(surf, model):
     # Fondo verde (pasto)
     surf.fill(C["grass"], pygame.Rect(0, 0, WIN_SIZE, WIN_H))
 
-    # Carriles
-    for (wx, wy, ww, wh) in ROAD_RECTS:
-        pygame.draw.rect(surf, C["road"], w2s_rect(wx, wy, ww, wh))
+    # Carriles con esquinas redondeadas
+    for seg in ROAD_RECTS:
+        _draw_road_segment(surf, *seg)
+    # Marcas de carril (línea punteada central)
+    for seg in ROAD_RECTS:
+        _draw_lane_mark(surf, *seg)
 
     # Semáforos
     _load_signals()
