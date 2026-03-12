@@ -1,12 +1,34 @@
 """
-Traffic Light Crossing - Pygame Migration
-Migrated from agentpy/matplotlib to pygame
+Traffic Light Crossing - agentpy + pygame
 """
 
+import agentpy as ap
 import pygame
 import numpy as np
 import sys
-import math
+
+# ── ROUTE GROUPS ──────────────────────────────────────────────────────────────
+# Each approach lists its possible internal routes and the probability of
+# a spawned car choosing each one (must sum to 1.0).
+ROUTE_GROUPS = {
+    'Norte': {
+        'routes': ['O680', 'O279', 'O263', 'O1064'],
+        'probs':  [0.25,   0.25,   0.25,   0.25],
+    },
+    'Sur': {
+        'routes': ['Y468', 'Y263', 'Y1064', 'Y680', 'P279'],
+        'probs':  [0.20,   0.20,   0.20,    0.20,   0.20],
+    },
+    'Este': {
+        'routes': ['B468', 'B263', 'B1064', 'B680'],
+        'probs':  [0.25,   0.25,   0.25,    0.25],
+    },
+    'Oeste': {
+        'routes': ['G263', 'G279', 'G468', 'G680'],
+        'probs':  [0.25,   0.25,   0.25,   0.25],
+    },
+}
+APPROACHES = list(ROUTE_GROUPS.keys())
 
 # ── PARAMETERS ────────────────────────────────────────────────────────────────
 params = {
@@ -15,15 +37,11 @@ params = {
     'green_ew': 10,
     'yellow': 5,
     'all_red': 6,
-    'interval_G263': 5,  'interval_P279': 5,
-    'interval_G279': 5,  'interval_G468': 5,
-    'interval_G680': 0,  'interval_Y468': 5,
-    'interval_Y263': 5,  'interval_Y1064': 5,
-    'interval_Y680': 5,  'interval_B468': 5,
-    'interval_B263': 5,  'interval_B1064': 5,
-    'interval_B680': 5,  'interval_O680': 5,
-    'interval_O279': 5,  'interval_O263': 5,
-    'interval_O1064': 5,
+    # One arrival rate per approach; route within approach is chosen by ROUTE_GROUPS probs
+    'lambda_Norte': 0.4,
+    'lambda_Sur':   0.4,
+    'lambda_Este':  0.4,
+    'lambda_Oeste': 0.4,
     'v_free': 7.0,
     'headway': 8.0,
     'L': 80.0,
@@ -34,8 +52,8 @@ params = {
 BG_COLOR      = (34, 34, 34)
 ROAD_COLOR    = (80, 80, 80)
 LANE_COLOR    = (200, 200, 200)
-CAR_MOVING    = (30, 120, 210)
-CAR_STOP      = (70, 90, 100)
+CAR_MOVING    = (56, 142, 60)
+CAR_STOP      = (249, 168, 37)
 CAR_BORDER    = (10, 10, 10)
 RED_LIGHT     = (211, 47, 47)
 YELLOW_LIGHT  = (249, 168, 37)
@@ -104,15 +122,35 @@ class FourWaySignals:
         phases = {0: "Norte-Sur", 1: "Este-Oeste", 2: "Diagonal Y", 3: "Diagonal B"}
         return phases.get(self.phase, "?")
 
-# ── CAR AGENT ─────────────────────────────────────────────────────────────────
-class Car:
-    def __init__(self, origin, p):
-        self.origin = origin
-        self.state  = 'moving'
-        self.v      = p['v_free']
-        self.p      = p
-        L, w        = p['L'], p['w']
-        off         = w / 2
+
+# ── HEADWAY ───────────────────────────────────────────────────────────────────
+def headway_ahead(me, cars):
+    if np.allclose(me.dir,[1,0]) or np.allclose(me.dir,[-1,0]):
+        same_lane = [c for c in cars if c is not me
+                     and np.allclose(c.dir,me.dir)
+                     and abs(c.pos[1]-me.pos[1]) < 0.1]
+    elif np.allclose(me.dir,[0,1]) or np.allclose(me.dir,[0,-1]):
+        same_lane = [c for c in cars if c is not me
+                     and np.allclose(c.dir,me.dir)
+                     and abs(c.pos[0]-me.pos[0]) < 0.1]
+    else:
+        same_lane = []
+    if not same_lane: return None
+    ahead = [(np.dot(c.pos - me.pos, me.dir), c)
+             for c in same_lane if np.dot(c.pos - me.pos, me.dir) > 0]
+    return min(ahead, key=lambda x: x[0])[1] if ahead else None
+
+
+# ── CAR AGENT (agentpy) ───────────────────────────────────────────────────────
+class Car(ap.Agent):
+    def setup(self, origin, params):
+        self.origin    = origin
+        self.state     = 'moving'
+        self.is_moving = True
+        self.v         = params['v_free']
+        self.p         = params
+        L, w           = params['L'], params['w']
+        off            = w / 2
 
         self.turn  = None; self.turn2 = None; self.turn3 = None
         self.has_turned  = False; self.has_turned2 = False
@@ -190,7 +228,12 @@ class Car:
     def dist_to(self, p):
         return np.linalg.norm(self.pos - np.array(p))
 
-    def step(self, lights, cars):
+    def step(self):
+        """Called by agentpy each simulation tick."""
+        lights = self.model.ctrl.lights()
+        cars   = list(self.model.cars)
+
+        self.is_moving = False
         if self.state == 'done': return
         if self.dist_to(self.goal) < 3.0:
             self.state = 'done'; return
@@ -200,7 +243,7 @@ class Car:
         if self.stopline is not None and np.allclose(self.pos, self.stopline, atol=3.0) and lights[self.origin] != 'G':
             return
 
-        # Turns
+        # ── Turns ──
         if self.origin == 'B263':
             if not self.has_turned and self.turn is not None and np.allclose(self.pos,self.turn,atol=3.0):
                 self.dir=np.array([0,-1],dtype=float); self.has_turned=True
@@ -225,92 +268,61 @@ class Car:
                 self.dir=np.array([0,-1],dtype=float)
         else:
             if self.turn is not None and np.allclose(self.pos,self.turn,atol=3.0):
-                if self.origin in ['G263','G468','B468']:         self.dir=np.array([0,-1],dtype=float)
-                elif self.origin in ['G680','B680']:              self.dir=np.array([0,+1],dtype=float)
-                elif self.origin in ['Y1064','O1064']:            self.dir=np.array([-1,0],dtype=float)
-                elif self.origin in ['P279','O279']:              self.dir=np.array([+1,0],dtype=float)
+                if self.origin in ['G263','G468','B468']:     self.dir=np.array([0,-1],dtype=float)
+                elif self.origin in ['G680','B680']:          self.dir=np.array([0,+1],dtype=float)
+                elif self.origin in ['Y1064','O1064']:        self.dir=np.array([-1,0],dtype=float)
+                elif self.origin in ['P279','O279']:          self.dir=np.array([+1,0],dtype=float)
 
-        # Headway
-        head = headway_ahead(self, cars, self.p['headway'])
+        # ── Headway ──
+        head = headway_ahead(self, cars)
         if head is not None:
             if np.linalg.norm(head.pos - self.pos) < self.p['headway']:
                 vmax = 0.0
 
         if vmax > 0.0:
             self.pos = self.pos + self.dir * vmax
+            self.is_moving = True
 
         L = self.p['L']
         if abs(self.pos[0]) > L or abs(self.pos[1]) > L:
             self.state = 'done'
 
 
-def headway_ahead(me, cars, headway_dist):
-    if np.allclose(me.dir,[1,0]) or np.allclose(me.dir,[-1,0]):
-        same_lane = [c for c in cars if c is not me
-                     and np.allclose(c.dir,me.dir)
-                     and abs(c.pos[1]-me.pos[1]) < 0.1]
-    elif np.allclose(me.dir,[0,1]) or np.allclose(me.dir,[0,-1]):
-        same_lane = [c for c in cars if c is not me
-                     and np.allclose(c.dir,me.dir)
-                     and abs(c.pos[0]-me.pos[0]) < 0.1]
-    else:
-        same_lane = []
-    if not same_lane: return None
-    ahead = [(np.dot(c.pos-me.pos, me.dir), c)
-             for c in same_lane if np.dot(c.pos-me.pos, me.dir) > 0]
-    return min(ahead, key=lambda x: x[0])[1] if ahead else None
-
-
-# ── SIMULATION ────────────────────────────────────────────────────────────────
-class TrafficSimulation:
-    def __init__(self, p):
-        self.p = p
+# ── TRAFFIC MODEL (agentpy) ───────────────────────────────────────────────────
+class TrafficModel(ap.Model):
+    def setup(self):
+        p = self.p
         self.ctrl = FourWaySignals(p['green_ns'], p['green_ew'], p['yellow'], p['all_red'])
-        self.cars = []
-        self.t = 0
-        self.throughput = 0
-        self.spawn_counts = {d: 0 for d in [
-            'G263','G279','G468','G680',
-            'Y468','Y263','Y1064','Y680','P279',
-            'B468','B263','B1064','B680',
-            'O680','O279','O263','O1064'
-        ]}
+        self.cars = ap.AgentList(self, 0, Car)
+        self.throughput   = 0
+        self.t            = 0
+        # Count spawned cars per approach
+        self.spawn_counts = {a: 0 for a in APPROACHES}
 
-    def spawn(self, origin, interval):
-        if interval <= 0: return
-        if self.t % interval == 0:
-            self.cars.append(Car(origin, self.p))
-            self.spawn_counts[origin] += 1
+    def spawn_approach(self, approach, lam):
+        """Spawn Poisson(lam) cars from `approach`; each picks its route by probability."""
+        if lam <= 0: return
+        k = np.random.poisson(lam)
+        if k == 0: return
+        group = ROUTE_GROUPS[approach]
+        for _ in range(k):
+            origin = np.random.choice(group['routes'], p=group['probs'])
+            new_car = ap.AgentList(self, 1, Car, origin=origin, params=dict(self.p))
+            self.cars = self.cars + new_car
+            self.spawn_counts[approach] += 1
 
     def step(self):
         p = self.p
-        self.spawn('G263',  p['interval_G263'])
-        self.spawn('G279',  p['interval_G279'])
-        self.spawn('G468',  p['interval_G468'])
-        self.spawn('G680',  p['interval_G680'])
-        self.spawn('Y468',  p['interval_Y468'])
-        self.spawn('Y263',  p['interval_Y263'])
-        self.spawn('Y1064', p['interval_Y1064'])
-        self.spawn('Y680',  p['interval_Y680'])
-        self.spawn('P279',  p['interval_P279'])
-        self.spawn('B468',  p['interval_B468'])
-        self.spawn('B263',  p['interval_B263'])
-        self.spawn('B1064', p['interval_B1064'])
-        self.spawn('B680',  p['interval_B680'])
-        self.spawn('O680',  p['interval_O680'])
-        self.spawn('O279',  p['interval_O279'])
-        self.spawn('O263',  p['interval_O263'])
-        self.spawn('O1064', p['interval_O1064'])
+        for approach in APPROACHES:
+            self.spawn_approach(approach, p[f'lambda_{approach}'])
 
         self.ctrl.step()
-        lights = self.ctrl.lights()
+        self.cars.step()   # agentpy calls Car.step() on every agent
 
-        for car in self.cars:
-            car.step(lights, self.cars)
-
-        done = [c for c in self.cars if c.state == 'done']
-        self.throughput += len(done)
-        self.cars = [c for c in self.cars if c.state != 'done']
+        done_count = sum(1 for c in self.cars if c.state == 'done')
+        self.throughput += done_count
+        alive_mask = [c.state != 'done' for c in self.cars]
+        self.cars = self.cars.select(alive_mask)
         self.t += 1
 
 
@@ -328,13 +340,6 @@ class Renderer:
 
     def sv(self, val):
         return scale_val(val, self.L, self.size)
-
-    def draw_road(self, x, y, width, height, color=ROAD_COLOR):
-        sx, sy = self.w2s([x, y + height])
-        sw = int(abs(self.sv(width)))
-        sh = int(abs(self.sv(height)))
-        if sw > 0 and sh > 0:
-            pygame.draw.rect(self.screen, color, (sx, sy, sw, sh))
 
     def draw(self, sim):
         self.screen.fill(BG_COLOR)
@@ -402,23 +407,20 @@ class Renderer:
         car_r = max(3, int(self.sv(2.0)))
         for car in sim.cars:
             sx, sy = self.w2s(car.pos)
-            col = CAR_MOVING if car.state == 'moving' else CAR_STOP
+            col = CAR_MOVING if car.is_moving else CAR_STOP
             pygame.draw.circle(self.screen, col, (sx, sy), car_r)
             pygame.draw.circle(self.screen, CAR_BORDER, (sx, sy), car_r, 1)
 
-        # ── HUD ──
         self._draw_hud(sim)
 
     def _draw_hud(self, sim):
         font_lg = pygame.font.SysFont('monospace', 18, bold=True)
         font_sm = pygame.font.SysFont('monospace', 13)
 
-        # Top bar
         pygame.draw.rect(self.screen, (20, 20, 20), (0, 0, WINDOW_SIZE, 36))
         title = font_lg.render(f"Traffic Simulation  |  t = {sim.t}s", True, (220, 220, 220))
         self.screen.blit(title, (10, 8))
 
-        # Stats box (bottom-right)
         total = sum(sim.spawn_counts.values())
         stats = [
             f"Created : {total}",
@@ -426,8 +428,10 @@ class Renderer:
             f"Active  : {len(sim.cars)}",
             f"Phase   : {sim.ctrl.phase_name}",
             f"Signal  : {sim.ctrl.sub}",
+            f"N:{sim.spawn_counts['Norte']} S:{sim.spawn_counts['Sur']}"
+            f" E:{sim.spawn_counts['Este']} O:{sim.spawn_counts['Oeste']}",
         ]
-        box_w, box_h = 180, 100
+        box_w, box_h = 180, 118
         box_x = WINDOW_SIZE - box_w - 10
         box_y = WINDOW_SIZE - box_h - 10
         s = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
@@ -439,7 +443,6 @@ class Renderer:
             txt = font_sm.render(line, True, col)
             self.screen.blit(txt, (box_x + 8, box_y + 6 + i * 18))
 
-        # Controls hint
         hint = font_sm.render("[SPACE] Pause  [R] Reset  [ESC] Quit", True, (120, 120, 120))
         self.screen.blit(hint, (10, WINDOW_SIZE - 22))
 
@@ -451,12 +454,13 @@ def main():
     pygame.display.set_caption("Traffic Light Crossing Simulation")
     clock  = pygame.time.Clock()
 
-    sim      = TrafficSimulation(params)
+    sim = TrafficModel(params)
+    sim.setup()
     renderer = Renderer(screen, params)
 
     running = True
     paused  = False
-    fps     = 10  # simulation speed
+    fps     = 10
 
     while running:
         for event in pygame.event.get():
@@ -468,7 +472,8 @@ def main():
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_r:
-                    sim = TrafficSimulation(params)
+                    sim = TrafficModel(params)
+                    sim.setup()
                 elif event.key == pygame.K_UP:
                     fps = min(60, fps + 2)
                 elif event.key == pygame.K_DOWN:
