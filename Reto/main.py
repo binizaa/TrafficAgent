@@ -90,8 +90,13 @@ def main():
             btn_stop.draw(screen, font_btn)
 
             pygame.draw.line(screen, (50, 50, 70), (SIM_SIZE + 10, 154), (SIM_SIZE + UI_WIDTH - 10, 154), 1)
+            use_h = cur_params.get('use_heuristic', True)
+            mode_txt  = 'CON heuristica' if use_h else 'SIN heuristica'
+            mode_col  = (80, 200, 100) if use_h else (220, 130, 60)
+            screen.blit(font_sm.render(f'Modo: {mode_txt}', True, mode_col), (PX, 160))
+
             shdr = font_hdr.render('ESTADÍSTICAS', True, (120, 180, 255))
-            screen.blit(shdr, (PX, 162))
+            screen.blit(shdr, (PX, 178))
 
             total = sum(sim.spawn_counts.values())
             for idx, (txt, col) in enumerate([
@@ -100,7 +105,7 @@ def main():
                 (f"Finalizados:{sim.throughput}",  (130, 220, 130)),
                 (f"Activos:    {len(sim.cars)}",   (220, 180, 80)),
             ]):
-                screen.blit(font_sm.render(txt, True, col), (PX, 182 + idx * 20))
+                screen.blit(font_sm.render(txt, True, col), (PX, 198 + idx * 20))
 
             pygame.draw.line(screen, (50, 50, 70), (SIM_SIZE + 10, 270), (SIM_SIZE + UI_WIDTH - 10, 270), 1)
             screen.blit(font_hdr.render('SEMÁFORO', True, (120, 180, 255)), (PX, 278))

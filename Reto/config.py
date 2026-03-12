@@ -24,38 +24,39 @@ TEXT_COLOR   = (230, 220, 80)
 ROUTE_GROUPS = {
     'Norte': {
         'routes': ['O680', 'O279', 'O263', 'O1064'],
-        'probs':  [0.25,   0.25,   0.25,   0.25],
+        'probs':  [0.50,   0.15,   0.15,   0.20],
     },
     'Sur': {
         'routes': ['Y468', 'Y263', 'Y1064', 'Y680', 'P279'],
-        'probs':  [0.20,   0.20,   0.20,    0.20,   0.20],
+        'probs':  [0.20,   0.25,   0.10,    0.25,   0.20],
     },
     'Este': {
         'routes': ['B468', 'B263', 'B1064', 'B680'],
-        'probs':  [0.25,   0.25,   0.25,    0.25],
+        'probs':  [0.50,   0.15,   0.15,   0.20],
     },
     'Oeste': {
         'routes': ['G263', 'G279', 'G468', 'G680'],
-        'probs':  [0.25,   0.25,   0.25,   0.25],
+        'probs':  [0.50,   0.15,   0.15,   0.20],
     },
 }
 APPROACHES = list(ROUTE_GROUPS.keys())
 
 # ── PARÁMETROS POR DEFECTO ────────────────────────────────────────────────────
 DEFAULT_PARAMS = {
-    'steps':        150,
-    'green_ns':     10,
-    'green_ew':     10,
-    'yellow':       5,
-    'all_red':      6,
-    'lambda_Norte': 0.4,
-    'lambda_Sur':   0.4,
-    'lambda_Este':  0.4,
-    'lambda_Oeste': 0.4,
-    'v_free':       7.0,
-    'headway':      8.0,
-    'L':            80.0,
-    'w':            3.5,
+    'steps':         150,
+    'green_ns':      10,
+    'green_ew':      10,
+    'yellow':        5,
+    'all_red':       6,
+    'lambda_Norte':  0.4,
+    'lambda_Sur':    0.4,
+    'lambda_Este':   0.4,
+    'lambda_Oeste':  0.4,
+    'v_free':        7.0,
+    'headway':       8.0,
+    'L':             80.0,
+    'w':             3.5,
+    'use_heuristic': True,   # True = con semáforos y headway, False = sin heurística
 }
 
 # ── PARÁMETROS AJUSTABLES (UI) ────────────────────────────────────────────────

@@ -4,13 +4,15 @@ import numpy as np
 from config import ROUTE_GROUPS, APPROACHES
 from model.signals import FourWaySignals
 from model.car import Car
+from model.carWithout import CarWithout
 
 
 class TrafficModel(ap.Model):
     def setup(self):
         p = self.p
         self.ctrl         = FourWaySignals(p['green_ns'], p['green_ew'], p['yellow'], p['all_red'])
-        self.cars         = ap.AgentList(self, 0, Car)
+        self._car_cls     = Car if p.get('use_heuristic', True) else CarWithout
+        self.cars         = ap.AgentList(self, 0, self._car_cls)
         self.throughput   = 0
         self.t            = 0
         self.spawn_counts = {a: 0 for a in APPROACHES}
@@ -24,7 +26,7 @@ class TrafficModel(ap.Model):
         group = ROUTE_GROUPS[approach]
         for _ in range(k):
             origin  = np.random.choice(group['routes'], p=group['probs'])
-            new_car = ap.AgentList(self, 1, Car, origin=origin, params=dict(self.p))
+            new_car = ap.AgentList(self, 1, self._car_cls, origin=origin, params=dict(self.p))
             self.cars = self.cars + new_car
             self.spawn_counts[approach] += 1
 

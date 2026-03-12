@@ -49,7 +49,13 @@ class MenuScreen:
             self._btn_plus.append( Button(self._PLUS_X,  cy, 32, 28, '+', (40, 110, 40), (60, 160, 60)))
 
         start_y = self._row_y(len(TUNABLE_PARAMS)) + 20
-        self._btn_start = Button(WINDOW_W // 2 - 140, start_y, 280, 48,
+
+        # Botón toggle heurística
+        toggle_y = start_y
+        self._btn_toggle = Button(WINDOW_W // 2 - 140, toggle_y, 280, 38,
+                                  '', (60, 40, 100), (90, 60, 150))
+
+        self._btn_start = Button(WINDOW_W // 2 - 140, toggle_y + 50, 280, 48,
                                  'INICIAR SIMULACIÓN', (30, 100, 30), (50, 160, 50))
 
     def handle(self, event, p):
@@ -58,6 +64,8 @@ class MenuScreen:
                 p[key] = round(max(vmin, p[key] - step), 3)
             if self._btn_plus[i].clicked(event):
                 p[key] = round(min(vmax, p[key] + step), 3)
+        if self._btn_toggle.clicked(event):
+            p['use_heuristic'] = not p.get('use_heuristic', True)
         if self._btn_start.clicked(event):
             return 'start'
         return None
@@ -95,6 +103,16 @@ class MenuScreen:
 
             self._btn_minus[i].draw(self.screen, font_md)
             self._btn_plus[i].draw(self.screen, font_md)
+
+        # Render toggle heurística
+        use_h = p.get('use_heuristic', True)
+        toggle_color = (30, 110, 50) if use_h else (110, 50, 30)
+        toggle_hover  = (50, 160, 70) if use_h else (160, 70, 50)
+        self._btn_toggle.color = toggle_color
+        self._btn_toggle.hover = toggle_hover
+        self._btn_toggle.text  = ('Modo: CON heuristica' if use_h
+                                  else 'Modo: SIN heuristica')
+        self._btn_toggle.draw(self.screen, font_md)
 
         self._btn_start.draw(self.screen, font_lg)
 
