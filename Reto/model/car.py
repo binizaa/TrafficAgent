@@ -27,10 +27,22 @@ class Car(ap.Agent):
         self.origin    = origin
         self.state     = 'moving'
         self.is_moving = True
-        self.v         = params['v_free']
         self.p         = params
         L, w           = params['L'], params['w']
         off            = w / 2
+
+        # Personalidad del conductor: velocidad y headway propios
+        self.v         = float(np.clip(
+            np.random.normal(params['v_free'],  params['v_free']  * 0.15),
+            params['v_free'] * 0.5, params['v_free'] * 1.8))
+        self._headway  = float(np.clip(
+            np.random.normal(params['headway'], params['headway'] * 0.25),
+            params['headway'] * 0.7, params['headway'] * 1.8))
+
+        # Tiempo de reacción al verde (pasos de espera, variable por conductor)
+        self._reaction_max  = np.random.randint(0, 5)   # 0–4 pasos
+        self._was_red       = False
+        self._reaction_ticks = 0
 
         self.turn  = None; self.turn2 = None; self.turn3 = None
         self.has_turned = False; self.has_turned2 = False
@@ -120,9 +132,19 @@ class Car(ap.Agent):
 
         vmax = self.v
 
-        if (self.stopline is not None
-                and np.allclose(self.pos, self.stopline, atol=3.0)
-                and lights[self.origin] != 'G'):
+        # ── Semáforo con tiempo de reacción ──
+        at_red = (self.stopline is not None
+                  and np.allclose(self.pos, self.stopline, atol=3.0)
+                  and lights[self.origin] != 'G')
+        if at_red:
+            self._was_red = True
+            return
+
+        if self._was_red:                          # acaba de ponerse verde
+            self._was_red = False
+            self._reaction_ticks = self._reaction_max
+        if self._reaction_ticks > 0:
+            self._reaction_ticks -= 1
             return
 
         # ── Giros ──
@@ -156,12 +178,24 @@ class Car(ap.Agent):
                 elif self.origin in ['P279', 'O279']:          self.dir = np.array([+1, 0], dtype=float)
 
         # ── Headway ──
+        MIN_GAP = self.p['w'] + 2.5   # separación física mínima (diámetro + margen)
         head = headway_ahead(self, cars)
-        if head is not None and np.linalg.norm(head.pos - self.pos) < self.p['headway']:
-            vmax = 0.0
+        if head is not None:
+            dist = np.linalg.norm(head.pos - self.pos)
+            if dist < self._headway:
+                vmax = 0.0
+            else:
+                # Clamp para no cruzar el gap mínimo en un solo paso
+                vmax = min(vmax, dist - MIN_GAP)
+                if vmax <= 0:
+                    vmax = 0.0
 
         if vmax > 0.0:
-            self.pos = self.pos + self.dir * vmax
+            # Pequeña variación de velocidad paso a paso (inercia real)
+            actual_v = float(np.clip(
+                self.v + np.random.normal(0, self.v * 0.08),
+                self.v * 0.5, min(self.v * 1.3, vmax)))
+            self.pos = self.pos + self.dir * actual_v
             self.is_moving = True
 
         L = self.p['L']

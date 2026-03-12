@@ -14,6 +14,11 @@ class CarWithout(ap.Agent):
         L, w        = params['L'], params['w']
         off         = w / 2
 
+        # Velocidad individual (sin semáforos, pero sí personalidad propia)
+        self.v = float(np.clip(
+            np.random.normal(params['v_free'], params['v_free'] * 0.15),
+            params['v_free'] * 0.5, params['v_free'] * 1.8))
+
         self.turn  = None; self.turn2 = None; self.turn3 = None
         self.has_turned = False; self.has_turned2 = False
 
@@ -127,8 +132,11 @@ class CarWithout(ap.Agent):
                 elif self.origin in ['Y1064', 'O1064']:        self.dir = np.array([-1, 0], dtype=float)
                 elif self.origin in ['P279', 'O279']:          self.dir = np.array([+1, 0], dtype=float)
 
-        # ── Movimiento sin heurística: velocidad libre siempre ──
-        self.pos       = self.pos + self.dir * self.v
+        # ── Movimiento sin heurística: velocidad libre con variación natural ──
+        actual_v = float(np.clip(
+            self.v + np.random.normal(0, self.v * 0.08),
+            self.v * 0.5, self.v * 1.3))
+        self.pos       = self.pos + self.dir * actual_v
         self.is_moving = True
 
         L = self.p['L']
