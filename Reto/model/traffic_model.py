@@ -11,7 +11,7 @@ class TrafficModel(ap.Model):
     def setup(self):
         p = self.p
         self.ctrl         = FourWaySignals(p['green_ns'], p['green_ew'], p['yellow'], p['all_red'])
-        self._car_cls     = Car if p.get('use_heuristic', True) else CarWithout
+        self._car_cls     = CarWithout if p.get('mode', 1) == 0 else Car
         self.cars         = ap.AgentList(self, 0, self._car_cls)
         self.throughput   = 0
         self.t            = 0

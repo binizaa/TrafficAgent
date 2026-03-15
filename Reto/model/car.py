@@ -4,21 +4,29 @@ import numpy as np
 
 # ── HEADWAY ───────────────────────────────────────────────────────────────────
 def headway_ahead(me, cars):
-    if np.allclose(me.dir, [1, 0]) or np.allclose(me.dir, [-1, 0]):
-        same_lane = [c for c in cars if c is not me
-                     and np.allclose(c.dir, me.dir)
-                     and abs(c.pos[1] - me.pos[1]) < 0.1]
-    elif np.allclose(me.dir, [0, 1]) or np.allclose(me.dir, [0, -1]):
-        same_lane = [c for c in cars if c is not me
-                     and np.allclose(c.dir, me.dir)
-                     and abs(c.pos[0] - me.pos[0]) < 0.1]
-    else:
-        same_lane = []
-    if not same_lane:
-        return None
-    ahead = [(np.dot(c.pos - me.pos, me.dir), c)
-             for c in same_lane if np.dot(c.pos - me.pos, me.dir) > 0]
-    return min(ahead, key=lambda x: x[0])[1] if ahead else None
+    dx, dy = me.dir
+    px, py = me.pos
+    best_dist, best_car = None, None
+
+    # Comparación directa de componentes (evita np.allclose por auto)
+    if dy == 0:          # horizontal
+        for c in cars:
+            if c is me: continue
+            if c.dir[1] != 0 or c.dir[0] != dx: continue
+            if abs(c.pos[1] - py) >= 0.1: continue
+            proj = (c.pos[0] - px) * dx
+            if proj > 0 and (best_dist is None or proj < best_dist):
+                best_dist, best_car = proj, c
+    elif dx == 0:        # vertical
+        for c in cars:
+            if c is me: continue
+            if c.dir[0] != 0 or c.dir[1] != dy: continue
+            if abs(c.pos[0] - px) >= 0.1: continue
+            proj = (c.pos[1] - py) * dy
+            if proj > 0 and (best_dist is None or proj < best_dist):
+                best_dist, best_car = proj, c
+
+    return best_car
 
 
 # ── AGENTE AUTO ───────────────────────────────────────────────────────────────
@@ -31,17 +39,24 @@ class Car(ap.Agent):
         L, w           = params['L'], params['w']
         off            = w / 2
 
-        # Personalidad del conductor: velocidad y headway propios
-        self.v         = float(np.clip(
-            np.random.normal(params['v_free'],  params['v_free']  * 0.15),
-            params['v_free'] * 0.5, params['v_free'] * 1.8))
-        self._headway  = float(np.clip(
-            np.random.normal(params['headway'], params['headway'] * 0.25),
-            params['headway'] * 0.7, params['headway'] * 1.8))
+        advanced = params.get('mode', 1) == 2
 
-        # Tiempo de reacción al verde (pasos de espera, variable por conductor)
-        self._reaction_max  = np.random.randint(0, 5)   # 0–4 pasos
-        self._was_red       = False
+        if advanced:
+            # Personalidad del conductor: velocidad y headway propios
+            self.v        = float(np.clip(
+                np.random.normal(params['v_free'],  params['v_free']  * 0.15),
+                params['v_free'] * 0.5, params['v_free'] * 1.8))
+            self._headway = float(np.clip(
+                np.random.normal(params['headway'], params['headway'] * 0.25),
+                params['headway'] * 0.7, params['headway'] * 1.8))
+            self._reaction_max = np.random.randint(0, 5)   # 0–4 pasos
+        else:
+            # Heurística básica: parámetros fijos iguales para todos
+            self.v             = params['v_free']
+            self._headway      = params['headway']
+            self._reaction_max = 0
+
+        self._was_red        = False
         self._reaction_ticks = 0
 
         self.turn  = None; self.turn2 = None; self.turn3 = None
@@ -191,10 +206,13 @@ class Car(ap.Agent):
                     vmax = 0.0
 
         if vmax > 0.0:
-            # Pequeña variación de velocidad paso a paso (inercia real)
-            actual_v = float(np.clip(
-                self.v + np.random.normal(0, self.v * 0.08),
-                self.v * 0.5, min(self.v * 1.3, vmax)))
+            if self.p.get('mode', 1) == 2:
+                # Variación de velocidad paso a paso (inercia real)
+                actual_v = float(np.clip(
+                    self.v + np.random.normal(0, self.v * 0.08),
+                    self.v * 0.5, min(self.v * 1.3, vmax)))
+            else:
+                actual_v = min(self.v, vmax)
             self.pos = self.pos + self.dir * actual_v
             self.is_moving = True
 

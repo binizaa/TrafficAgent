@@ -65,7 +65,7 @@ class MenuScreen:
             if self._btn_plus[i].clicked(event):
                 p[key] = round(min(vmax, p[key] + step), 3)
         if self._btn_toggle.clicked(event):
-            p['use_heuristic'] = not p.get('use_heuristic', True)
+            p['mode'] = (p.get('mode', 1) + 1) % 3
         if self._btn_start.clicked(event):
             return 'start'
         return None
@@ -104,14 +104,17 @@ class MenuScreen:
             self._btn_minus[i].draw(self.screen, font_md)
             self._btn_plus[i].draw(self.screen, font_md)
 
-        # Render toggle heurística
-        use_h = p.get('use_heuristic', True)
-        toggle_color = (30, 110, 50) if use_h else (110, 50, 30)
-        toggle_hover  = (50, 160, 70) if use_h else (160, 70, 50)
-        self._btn_toggle.color = toggle_color
-        self._btn_toggle.hover = toggle_hover
-        self._btn_toggle.text  = ('Modo: CON heuristica' if use_h
-                                  else 'Modo: SIN heuristica')
+        # Render toggle modo (0/1/2)
+        mode = p.get('mode', 1)
+        _MODE_CFG = {
+            0: ('SIN heuristica',         (130, 50, 30),  (180, 70, 50)),
+            1: ('Heuristica basica',       (30,  90, 130), (50, 130, 180)),
+            2: ('Heuristica avanzada',     (30, 110, 50),  (50, 160, 70)),
+        }
+        label, color, hover = _MODE_CFG[mode]
+        self._btn_toggle.color = color
+        self._btn_toggle.hover = hover
+        self._btn_toggle.text  = f'Modo: {label}'
         self._btn_toggle.draw(self.screen, font_md)
 
         self._btn_start.draw(self.screen, font_lg)

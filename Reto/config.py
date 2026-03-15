@@ -56,7 +56,7 @@ DEFAULT_PARAMS = {
     'headway':       8.0,
     'L':             80.0,
     'w':             3.5,
-    'use_heuristic': True,   # True = con semáforos y headway, False = sin heurística
+    'mode': 1,   # 0 = sin heurística | 1 = heurística básica | 2 = heurística avanzada
 }
 
 # ── PARÁMETROS AJUSTABLES (UI) ────────────────────────────────────────────────

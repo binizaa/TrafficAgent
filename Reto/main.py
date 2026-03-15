@@ -90,9 +90,12 @@ def main():
             btn_stop.draw(screen, font_btn)
 
             pygame.draw.line(screen, (50, 50, 70), (SIM_SIZE + 10, 154), (SIM_SIZE + UI_WIDTH - 10, 154), 1)
-            use_h = cur_params.get('use_heuristic', True)
-            mode_txt  = 'CON heuristica' if use_h else 'SIN heuristica'
-            mode_col  = (80, 200, 100) if use_h else (220, 130, 60)
+            _MODE_DISPLAY = {
+                0: ('SIN heuristica',     (220, 130,  60)),
+                1: ('Heuristica basica',  ( 80, 160, 220)),
+                2: ('Heuristica avanzada',(  80, 200, 100)),
+            }
+            mode_txt, mode_col = _MODE_DISPLAY[cur_params.get('mode', 1)]
             screen.blit(font_sm.render(f'Modo: {mode_txt}', True, mode_col), (PX, 160))
 
             shdr = font_hdr.render('ESTADÍSTICAS', True, (120, 180, 255))
